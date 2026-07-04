@@ -59,10 +59,6 @@ class FeatureVector(BaseModel):
     groundwater_depth_m: float
     groundwater_source: str = "fallback"
 
-    # remote sensing (optional productivity proxy)
-    ndvi_recent: Optional[float] = None
-    ndvi_source: str = "unavailable"
-
     # provenance — which features came from live data vs fallback
     real_features: list[str] = Field(default_factory=list)
     fallback_features: list[str] = Field(default_factory=list)

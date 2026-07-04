@@ -44,6 +44,12 @@ class Settings:
     SARVAM_TTS_MODEL: str = _get("SARVAM_TTS_MODEL", "bulbul:v2")
     SARVAM_TTS_SPEAKER: str = _get("SARVAM_TTS_SPEAKER", "anushka")
 
+    # ----- data.gov.in (Agmarknet mandi prices, Component 1) -----
+    # Defaults to data.gov.in's public sample key so prices work out-of-the-box;
+    # replace with your own free key from https://data.gov.in for production.
+    DATAGOV_API_KEY: str = _get(
+        "DATAGOV_API_KEY", "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b")
+
     # Which Indic language provider to use: "sarvam" | "bhashini" | "auto".
     # "auto" prefers Sarvam if its key is set, else Bhashini, else demo stub.
     LANGUAGE_PROVIDER: str = _get("LANGUAGE_PROVIDER", "auto")

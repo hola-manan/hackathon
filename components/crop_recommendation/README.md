@@ -38,19 +38,36 @@ curl "http://127.0.0.1:8099/v1/recommendations/by-location?lat=16.31&lon=80.44"
 | L5 confidence | `pipeline.l5_confidence` | provenance + separation | conformal (MAPIE) |
 | Narrate | `engine._narrate` | plain-language *why* | Claude + Sarvam TTS |
 
-## Data providers (live + fallback)
+## Data providers (only operational sources are wired)
 
-| Provider | Live source (no key) | Fallback |
-|---|---|---|
-| `WeatherProvider` | **Open-Meteo** forecast + historical archive (real seasonal rainfall) | agro-zone climatology |
-| `SoilProvider` | **SoilGrids** REST (ISRIC) | agro-zone soil defaults |
-| `GroundwaterProvider` | — (CGWB has no free API) | agro-zone default |
-| `MarketProvider` | — (Agmarknet needs data.gov.in key) | KB price table |
-| `SatelliteProvider` | — (GEE needs service account) | NDVI omitted |
+| Provider | Source | Key? | Status |
+|---|---|---|---|
+| `WeatherProvider` | **Open-Meteo** (temp/humidity) + **NASA POWER** (seasonal rainfall climatology) | No | ✅ live |
+| `SoilProvider` | agro-zone regional estimate + **farmer Soil Health Card override** | — | ✅ operational |
+| `GroundwaterProvider` | **farmer-reported** borewell depth, else regional average | — | ✅ operational |
+| `MarketProvider` | **Agmarknet** (data.gov.in) mandi prices, cached out-of-band | sample key (replace for prod) | ✅ live, opportunistic |
 
-Every provider records whether a value was **live or fallback**; the engine
-reports this as `feature_provenance` and lowers confidence (→ `needs_soil_test`)
-when key features are fallback. This keeps the recommendation honest.
+**Removed** (were non-operational): SoilGrids live REST (slow ~15s + returns
+null at many points — real soil path is the Soil Health Card) and the
+GEE/NDVI satellite stub (needs a service account; unused in scoring).
+
+**Why Agmarknet is cached, not live-per-request:** the data.gov.in endpoint is
+slow (~15s) and intermittently throttled on the shared sample key, so a live
+call would blow the ≤3s reply budget. `refresh_prices.py` (or the app startup
+task) warms the cache out-of-band; the request path reads it instantly and
+falls back to the KB price table until warm. Use your own free data.gov.in key
+for better reliability.
+
+Every provider records whether a value was **live / farmer-supplied vs
+regional-estimate**; the engine reports this as `feature_provenance` and lowers
+confidence (→ `needs_soil_test`) when soil isn't from the farmer. Passing
+`soil_override` / `groundwater_m` (e.g. from the farmer's Soil Health Card)
+raises confidence and clears the flag.
+
+## Refreshing prices
+```bash
+python -m components.crop_recommendation.refresh_prices   # warms mandi-price cache
+```
 
 ## Design notes
 - **Location-first**: the farmer only needs to share their farm pin; no data entry.

@@ -20,19 +20,28 @@ MODEL_VERSION = "c1-crop-reco-v0.2-location"
 
 async def recommend_from_location(
     lat: float, lon: float, season: Season | None = None, top_n: int = 3,
+    soil_override: dict | None = None, groundwater_m: float | None = None,
 ) -> RecommendationResult:
+    """Recommend crops from a farm location.
+
+    soil_override: optional {ph,n,p,k,...} from the farmer's Soil Health Card.
+    groundwater_m: optional farmer-reported borewell/water-table depth (m).
+    Both raise confidence and remove the 'needs soil test' flag when supplied.
+    """
     season = season or kb.infer_season()
-    fv = await build_feature_vector(lat, lon, season)
+    fv = await build_feature_vector(lat, lon, season, soil_override, groundwater_m)
 
     # L1 — feasibility filter
     candidates = pl.l1_candidates(fv)
 
-    # L2–L4 — score, yield, rank each candidate
+    # L2–L4 — score, yield, rank each candidate. Prices are read from the
+    # market cache instantly (Agmarknet is refreshed out-of-band, never in the
+    # request path) so the recommendation stays fast.
     scored: list[CropScore] = []
     for crop in candidates:
         suitability, s_reasons = pl.l2_suitability(fv, crop)
         exp_yield = pl.l3_expected_yield(fv, crop, suitability)
-        price, _ = await market_provider.price_rs_per_qtl(crop)
+        price, _ = market_provider.get_cached_price(crop)
         score, water_risk, margin, r_reasons = pl.l4_rank(
             fv, crop, suitability, exp_yield, price)
         scored.append(CropScore(

@@ -82,6 +82,25 @@ CROP_KB: dict[str, dict] = {
                       base_yield=1.5, price=6400, cost=28000, gw_tol=25),
 }
 
+# Map our crop names → the exact commodity name used by the Agmarknet /
+# data.gov.in daily-price API (so MarketProvider can pull real mandi prices).
+AGMARKNET_COMMODITY = {
+    "Rice": "Rice",
+    "Maize": "Maize",
+    "Cotton": "Cotton",
+    "Sorghum (Jowar)": "Jowar(Sorghum)",
+    "Pearl millet (Bajra)": "Bajra(Pearl Millet/Cumbu)",
+    "Groundnut": "Groundnut",
+    "Green gram (Moong)": "Green Gram (Moong)(Whole)",
+    "Chickpea (Chana)": "Bengal Gram(Gram)(Whole)",
+    "Wheat": "Wheat",
+    "Mustard": "Mustard",
+    "Soybean": "Soyabean",
+    "Pigeon pea (Tur)": "Arhar (Tur/Red Gram)(Whole)",
+    "Sugarcane": "Sugarcane",
+    "Sunflower": "Sunflower",
+}
+
 # Nutrient demand → (low_threshold, high_threshold) in kg/ha for N, P, K.
 NUTRIENT_THRESHOLDS = {
     "n": (240.0, 480.0),

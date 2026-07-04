@@ -1,20 +1,27 @@
-"""Feature providers for Component 1.
+"""Feature providers for Component 1 (crop recommendation).
 
-Each provider fetches one feature family for a lat/lon and degrades gracefully:
-try a real, free/no-key source; on any failure fall back to the agro-zone
-defaults in knowledge.py. Every provider records whether the value came from
-live data or fallback so the engine can report provenance and adjust confidence.
+FUNCTIONALITY: fetch each feature family for a farm lat/lon from an operational,
+no-key source, degrading gracefully to a documented fallback. Only sources that
+actually work without paid/complex credentials are wired here:
 
-Live sources used (no API key required):
-  - Weather / rainfall : Open-Meteo forecast + historical archive
-  - Soil               : SoilGrids REST (ISRIC)  [may be paused -> fallback]
-Providers with no free API (groundwater/CGWB, market/Agmarknet, NDVI/GEE) use
-documented fallbacks and expose the same interface for later wiring.
+  - WeatherProvider    : Open-Meteo (live temp/humidity) + NASA POWER
+                         (seasonal-rainfall climatology). Both free, no key.
+  - SoilProvider       : regional agro-zone estimate + optional farmer override.
+                         (SoilGrids REST was removed: slow ~14s and returns
+                         null at many points; real path is Soil Health Card.)
+  - GroundwaterProvider: farmer-reported depth if given, else regional average.
+                         (CGWB/India-WRIS has no free REST API.)
+  - MarketProvider     : REAL mandi prices from data.gov.in Agmarknet, with the
+                         KB price as fallback.
+
+Removed vs the first cut: SoilGrids live REST (unreliable) and the GEE/NDVI
+satellite stub (needs a service account; was unused in scoring).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import date
+import os
 
 import httpx
 
@@ -23,126 +30,162 @@ from .schemas import Season
 
 log = logging.getLogger("kisan.c1.providers")
 
-_TIMEOUT = httpx.Timeout(8.0)
+_TIMEOUT = httpx.Timeout(12.0)
+_DATAGOV_KEY = os.environ.get(
+    "DATAGOV_API_KEY", "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b")
+
+_DAYS_IN_MONTH = {1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
+                  7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
+_SEASON_MONTHS = {
+    Season.kharif: ["JUN", "JUL", "AUG", "SEP", "OCT"],
+    Season.rabi: ["NOV", "DEC", "JAN", "FEB", "MAR"],
+    Season.zaid: ["APR", "MAY"],
+}
+_MONTH_NUM = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+              "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
 
 
 # --------------------------------------------------------------------------- #
-# Weather / rainfall — Open-Meteo (free, no key)
+# Weather / rainfall — Open-Meteo (temp/humidity) + NASA POWER (seasonal rain)
 # --------------------------------------------------------------------------- #
 class WeatherProvider:
-    FORECAST = "https://api.open-meteo.com/v1/forecast"
-    ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
+    OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
+    NASA_POWER = "https://power.larc.nasa.gov/api/temporal/climatology/point"
 
     async def fetch(self, lat: float, lon: float, season: Season, zone: dict) -> dict:
-        out = {"source": "fallback"}
+        # Start from agro-zone fallback so we always return a full vector.
         t = zone["temp"][season]
-        out.update(temp_min_c=float(t[0]), temp_max_c=float(t[1]),
-                   temp_mean_c=round((t[0] + t[1]) / 2, 1),
-                   humidity_pct=float(zone["humidity"]),
-                   seasonal_rainfall_mm=float(zone["rain"][season]))
+        out = {"source": "fallback",
+               "temp_min_c": float(t[0]), "temp_max_c": float(t[1]),
+               "temp_mean_c": round((t[0] + t[1]) / 2, 1),
+               "humidity_pct": float(zone["humidity"]),
+               "seasonal_rainfall_mm": float(zone["rain"][season])}
+        got_live = False
 
-        # Live current conditions + short forecast for temp/humidity.
+        # Live current temp/humidity + short forecast (Open-Meteo, no key).
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-                r = await c.get(self.FORECAST, params={
+                r = await c.get(self.OPEN_METEO, params={
                     "latitude": lat, "longitude": lon,
                     "daily": "temperature_2m_max,temperature_2m_min",
-                    "current": "relative_humidity_2m,temperature_2m",
-                    "forecast_days": 7, "timezone": "auto"})
+                    "current": "relative_humidity_2m", "forecast_days": 7,
+                    "timezone": "auto"})
                 r.raise_for_status()
                 j = r.json()
             daily = j.get("daily", {})
-            tmaxs = [x for x in daily.get("temperature_2m_max", []) if x is not None]
-            tmins = [x for x in daily.get("temperature_2m_min", []) if x is not None]
-            if tmaxs and tmins:
-                out["temp_max_c"] = round(sum(tmaxs) / len(tmaxs), 1)
-                out["temp_min_c"] = round(sum(tmins) / len(tmins), 1)
+            tmax = [x for x in daily.get("temperature_2m_max", []) if x is not None]
+            tmin = [x for x in daily.get("temperature_2m_min", []) if x is not None]
+            if tmax and tmin:
+                out["temp_max_c"] = round(sum(tmax) / len(tmax), 1)
+                out["temp_min_c"] = round(sum(tmin) / len(tmin), 1)
                 out["temp_mean_c"] = round((out["temp_max_c"] + out["temp_min_c"]) / 2, 1)
             hum = j.get("current", {}).get("relative_humidity_2m")
             if hum is not None:
                 out["humidity_pct"] = float(hum)
-            out["source"] = "open-meteo"
+            got_live = True
         except Exception as e:  # noqa: BLE001
-            log.info("weather forecast fallback: %s", e)
+            log.info("open-meteo fallback: %s", e)
 
-        # Live seasonal rainfall from last year's same season (archive).
+        # Seasonal rainfall from NASA POWER climatology (reliable, no key).
         try:
-            start, end = kb.season_date_range(season, date.today().year - 1)
             async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-                r = await c.get(self.ARCHIVE, params={
-                    "latitude": lat, "longitude": lon,
-                    "start_date": start.isoformat(), "end_date": end.isoformat(),
-                    "daily": "precipitation_sum", "timezone": "auto"})
+                r = await c.get(self.NASA_POWER, params={
+                    "parameters": "PRECTOTCORR", "community": "AG",
+                    "latitude": lat, "longitude": lon, "format": "JSON"})
                 r.raise_for_status()
-                precs = [x for x in r.json().get("daily", {}).get("precipitation_sum", [])
-                         if x is not None]
-            if precs:
-                out["seasonal_rainfall_mm"] = round(sum(precs), 1)
-                out["source"] = "open-meteo"
+                monthly = r.json()["properties"]["parameter"]["PRECTOTCORR"]
+            total = sum(monthly[m] * _DAYS_IN_MONTH[_MONTH_NUM[m]]
+                        for m in _SEASON_MONTHS[season] if monthly.get(m) is not None)
+            if total > 0:
+                out["seasonal_rainfall_mm"] = round(total, 1)
+                got_live = True
         except Exception as e:  # noqa: BLE001
-            log.info("rainfall archive fallback: %s", e)
+            log.info("nasa-power fallback: %s", e)
 
+        if got_live:
+            out["source"] = "open-meteo+nasa-power"
         return out
 
 
 # --------------------------------------------------------------------------- #
-# Soil — SoilGrids REST (ISRIC). Gap-fills Soil Health Card.
+# Soil — regional agro-zone estimate + optional farmer override
 # --------------------------------------------------------------------------- #
 class SoilProvider:
-    URL = "https://rest.isric.org/soilgrids/v2.0/properties/query"
-
-    async def fetch(self, lat: float, lon: float, zone: dict) -> dict:
+    async def fetch(self, zone: dict, override: dict | None = None) -> dict:
         d = zone["soil"]
-        out = {"source": "fallback", "ph": float(d["ph"]), "n": float(d["n"]),
-               "p": float(d["p"]), "k": float(d["k"]), "oc": float(d["oc"]),
-               "texture": d["texture"]}
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-                r = await c.get(self.URL, params=[
-                    ("lon", lon), ("lat", lat),
-                    ("property", "phh2o"), ("property", "soc"),
-                    ("depth", "0-5cm"), ("value", "mean")])
-                r.raise_for_status()
-                layers = r.json()["properties"]["layers"]
-            got = {l["name"]: l["depths"][0]["values"]["mean"] for l in layers}
-            if got.get("phh2o") is not None:
-                out["ph"] = round(got["phh2o"] / 10.0, 1)   # SoilGrids pH is ×10
-                out["source"] = "soilgrids"
-            if got.get("soc") is not None:
-                out["oc"] = round(got["soc"] / 100.0, 2)     # dg/kg → %
-            # NOTE: SoilGrids total-N is NOT available-N; we keep zone N/P/K
-            # (SHC-native) rather than mixing incompatible nitrogen units.
-        except Exception as e:  # noqa: BLE001
-            log.info("soilgrids fallback: %s", e)
+        out = {"source": "regional-estimate", "ph": float(d["ph"]),
+               "n": float(d["n"]), "p": float(d["p"]), "k": float(d["k"]),
+               "oc": float(d["oc"]), "texture": d["texture"]}
+        if override:  # values from a farmer's Soil Health Card, entered via chat
+            out.update({k: v for k, v in override.items() if v is not None})
+            out["source"] = "farmer"
         return out
 
 
 # --------------------------------------------------------------------------- #
-# Groundwater — CGWB / India-WRIS has no free API; zone fallback for now.
+# Groundwater — farmer-reported borewell depth, else regional average
 # --------------------------------------------------------------------------- #
 class GroundwaterProvider:
-    async def fetch(self, lat: float, lon: float, zone: dict) -> dict:
-        return {"depth_m": float(zone["gw_depth_m"]), "source": "fallback"}
+    async def fetch(self, zone: dict, override_m: float | None = None) -> dict:
+        if override_m is not None:
+            return {"depth_m": float(override_m), "source": "farmer"}
+        return {"depth_m": float(zone["gw_depth_m"]), "source": "regional-estimate"}
 
 
 # --------------------------------------------------------------------------- #
-# Market prices — Agmarknet (needs data.gov.in key); KB price used as fallback.
+# Market prices — REAL Agmarknet daily mandi prices via data.gov.in
 # --------------------------------------------------------------------------- #
 class MarketProvider:
-    async def price_rs_per_qtl(self, crop: str) -> tuple[float, str]:
+    """Real Agmarknet mandi prices via data.gov.in — but the data.gov.in
+    endpoint is slow (~15s/call), so we NEVER call it in the recommendation hot
+    path. Instead `refresh()` populates a cache out-of-band (startup task /
+    nightly batch) and `get_cached_price()` reads it instantly, falling back to
+    the KB price until the cache is warm. Prices are 'as of last refresh'."""
+    URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
+    _CACHE_TTL = 12 * 3600.0  # mandi prices refresh at most daily
+
+    def __init__(self) -> None:
+        self._cache: dict[str, tuple[float, tuple[float, str]]] = {}
+
+    def get_cached_price(self, crop: str) -> tuple[float, str]:
+        """Instant, no network — cached Agmarknet price or KB fallback."""
+        import time
+        cached = self._cache.get(crop)
+        if cached and (time.time() - cached[0]) < self._CACHE_TTL:
+            return cached[1]
         return float(kb.CROP_KB[crop]["price"]), "kb-fallback"
 
+    async def refresh(self, crops: list[str] | None = None, per_call_timeout: float = 8.0) -> int:
+        """Populate the price cache from Agmarknet. Run out-of-band. Returns the
+        number of crops for which a live price was fetched."""
+        import time
+        crops = crops or list(kb.AGMARKNET_COMMODITY)
+        results = await asyncio.gather(
+            *[self._fetch_one(c, per_call_timeout) for c in crops],
+            return_exceptions=True)
+        hits = 0
+        for crop, res in zip(crops, results):
+            if isinstance(res, tuple):
+                self._cache[crop] = (time.time(), res)
+                hits += 1
+        return hits
 
-# --------------------------------------------------------------------------- #
-# NDVI — Google Earth Engine (needs service account); optional proxy.
-# --------------------------------------------------------------------------- #
-class SatelliteProvider:
-    async def ndvi(self, lat: float, lon: float, season: Season) -> tuple[float | None, str]:
-        return None, "unavailable"
+    async def _fetch_one(self, crop: str, timeout: float) -> tuple[float, str] | None:
+        commodity = kb.AGMARKNET_COMMODITY.get(crop)
+        if not commodity:
+            return None
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.get(self.URL, params={
+                "api-key": _DATAGOV_KEY, "format": "json", "limit": 20,
+                "filters[commodity]": commodity})
+            r.raise_for_status()
+            recs = r.json().get("records", [])
+        prices = [float(x["modal_price"]) for x in recs
+                  if x.get("modal_price") not in (None, "", "0")]
+        return (round(sum(prices) / len(prices), 0), "agmarknet") if prices else None
 
 
 weather_provider = WeatherProvider()
 soil_provider = SoilProvider()
 groundwater_provider = GroundwaterProvider()
 market_provider = MarketProvider()
-satellite_provider = SatelliteProvider()

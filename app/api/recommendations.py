@@ -30,8 +30,12 @@ async def recommend_by_location(
     lon: float = Query(..., ge=-180, le=180, description="Farm longitude"),
     season: Optional[Season] = Query(None, description="Auto-inferred from date if omitted"),
     top_n: int = Query(3, ge=1, le=10),
+    groundwater_m: Optional[float] = Query(
+        None, ge=0, description="Optional farmer-reported borewell/water-table depth (m)"),
 ) -> RecommendationResult:
     """Recommend crops from just the farm location. The engine assembles soil,
     weather, rainfall and groundwater features (live where available, agro-zone
-    fallback otherwise) and runs the L1–L5 pipeline."""
-    return await recommend_from_location(lat, lon, season=season, top_n=top_n)
+    estimate otherwise) and runs the L1–L5 pipeline. An optional farmer-reported
+    groundwater depth improves accuracy."""
+    return await recommend_from_location(
+        lat, lon, season=season, top_n=top_n, groundwater_m=groundwater_m)

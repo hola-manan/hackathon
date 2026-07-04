@@ -142,5 +142,6 @@ def l5_confidence(fv: FeatureVector, ranked: list[CropScore]) -> tuple[float, bo
     sep = (ranked[0].score - ranked[1].score) if len(ranked) > 1 else 0.3
     sep_norm = min(1.0, sep / 0.15)
     confidence = round(0.55 * completeness + 0.45 * sep_norm, 2)
-    needs_soil_test = fv.soil_source == "fallback" or confidence < 0.5
+    # A real soil test (or farmer's Soil Health Card) removes the flag.
+    needs_soil_test = fv.soil_source != "farmer" or confidence < 0.5
     return confidence, needs_soil_test
