@@ -46,7 +46,9 @@ class Settings:
 
     @property
     def bhashini_live(self) -> bool:
-        return bool(self.BHASHINI_USER_ID and self.BHASHINI_INFERENCE_KEY)
+        # The ULCA flow needs only User ID + ULCA API key; the per-request
+        # inference key is returned by the getModelsPipeline config call.
+        return bool(self.BHASHINI_USER_ID and self.BHASHINI_API_KEY)
 
     @property
     def whatsapp_live(self) -> bool:
