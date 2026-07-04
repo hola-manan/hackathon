@@ -1,0 +1,314 @@
+<title>Kisan Alert — Service Architecture</title>
+<style>
+  :root{
+    --page:#F7F4EC; --panel:#FFFFFF; --panel-tint:#F1ECE0; --hair:#E3DCCC;
+    --ink:#23262C; --muted:#6A7280; --band-label:#9A8F76;
+    --node-ink:#1E2530; --node-sub:#55606E;
+    /* node fills / strokes (light) */
+    --f-farmer:#E5F0E0; --s-farmer:#3E7A34;
+    --f-lang:#DBEFEF;   --s-lang:#12777F;
+    --f-gate:#E7E6F6;   --s-gate:#514BC0;
+    --f-orch:#FBE6C4;   --s-orch:#C8801A;
+    --f-svc:#DCE9F6;    --s-svc:#2A6DB0;
+    --f-sup:#EAF1FA;    --s-sup:#5B87B8;
+    --f-model:#F6E4C1;  --s-model:#B9832A;
+    --f-data:#E5E7EC;   --s-data:#5A6675;
+    --f-govt:#ECE7D2;   --s-govt:#8A7A22;
+    --f-rsk:#E1EBD6;    --s-rsk:#5E7A2E;
+    /* arrows */
+    --arw-primary:#3A4250; --arw-data:#2A6DB0; --arw-alert:#CC5A3A; --arw-human:#5E7A2E;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#141210; --panel:#1D1B16; --panel-tint:#211E18; --hair:#33302A;
+      --ink:#ECEAE3; --muted:#A39C8C; --band-label:#7C7360;
+      --node-ink:#F1EFE8; --node-sub:#B9B3A6;
+      --f-farmer:#22301B; --s-farmer:#77BA64;
+      --f-lang:#15302F;   --s-lang:#4FC3C9;
+      --f-gate:#24233A;   --s-gate:#9A95F0;
+      --f-orch:#3A2E12;   --s-orch:#E8B45C;
+      --f-svc:#182A3E;    --s-svc:#6FA8DF;
+      --f-sup:#1C2836;    --s-sup:#82A7CE;
+      --f-model:#352A12;  --s-model:#DCA94E;
+      --f-data:#262A31;   --s-data:#94A1B3;
+      --f-govt:#2E2A16;   --s-govt:#C9B44F;
+      --f-rsk:#232E19;    --s-rsk:#95B661;
+      --arw-primary:#9AA4B2; --arw-data:#6FA8DF; --arw-alert:#E8805F; --arw-human:#95B661;
+    }
+  }
+  :root[data-theme="light"]{
+    --page:#F7F4EC; --panel:#FFFFFF; --panel-tint:#F1ECE0; --hair:#E3DCCC;
+    --ink:#23262C; --muted:#6A7280; --band-label:#9A8F76; --node-ink:#1E2530; --node-sub:#55606E;
+    --f-farmer:#E5F0E0; --s-farmer:#3E7A34; --f-lang:#DBEFEF; --s-lang:#12777F;
+    --f-gate:#E7E6F6; --s-gate:#514BC0; --f-orch:#FBE6C4; --s-orch:#C8801A;
+    --f-svc:#DCE9F6; --s-svc:#2A6DB0; --f-sup:#EAF1FA; --s-sup:#5B87B8;
+    --f-model:#F6E4C1; --s-model:#B9832A; --f-data:#E5E7EC; --s-data:#5A6675;
+    --f-govt:#ECE7D2; --s-govt:#8A7A22; --f-rsk:#E1EBD6; --s-rsk:#5E7A2E;
+    --arw-primary:#3A4250; --arw-data:#2A6DB0; --arw-alert:#CC5A3A; --arw-human:#5E7A2E;
+  }
+  :root[data-theme="dark"]{
+    --page:#141210; --panel:#1D1B16; --panel-tint:#211E18; --hair:#33302A;
+    --ink:#ECEAE3; --muted:#A39C8C; --band-label:#7C7360; --node-ink:#F1EFE8; --node-sub:#B9B3A6;
+    --f-farmer:#22301B; --s-farmer:#77BA64; --f-lang:#15302F; --s-lang:#4FC3C9;
+    --f-gate:#24233A; --s-gate:#9A95F0; --f-orch:#3A2E12; --s-orch:#E8B45C;
+    --f-svc:#182A3E; --s-svc:#6FA8DF; --f-sup:#1C2836; --s-sup:#82A7CE;
+    --f-model:#352A12; --s-model:#DCA94E; --f-data:#262A31; --s-data:#94A1B3;
+    --f-govt:#2E2A16; --s-govt:#C9B44F; --f-rsk:#232E19; --s-rsk:#95B661;
+    --arw-primary:#9AA4B2; --arw-data:#6FA8DF; --arw-alert:#E8805F; --arw-human:#95B661;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--page);color:var(--ink);
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1360px;margin:0 auto;padding:32px 24px 56px;}
+  header .eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--s-farmer);font-weight:700;}
+  header h1{font-size:30px;line-height:1.15;margin:6px 0 6px;text-wrap:balance;letter-spacing:-.01em;}
+  header p{margin:0;color:var(--muted);font-size:15px;max-width:70ch;line-height:1.5;}
+  .diagram{margin-top:22px;background:var(--panel);border:1px solid var(--hair);border-radius:16px;
+    padding:14px;overflow-x:auto;}
+  svg{display:block;min-width:1040px;width:100%;height:auto;}
+
+  /* svg text */
+  .b-title{fill:var(--node-ink);font-weight:700;font-size:15px;}
+  .b-title.sm{font-size:13.5px;}
+  .b-sub{fill:var(--node-sub);font-size:11.5px;}
+  .b-sub.xs{font-size:10.5px;}
+  .pill-t{fill:var(--node-ink);font-weight:600;font-size:12.5px;}
+  .pill-s{fill:var(--node-sub);font-size:10.5px;}
+  .band-label{fill:var(--band-label);font-weight:700;font-size:11px;letter-spacing:.14em;}
+  .legend-t{fill:var(--ink);font-weight:700;font-size:12.5px;}
+  .legend-l{fill:var(--muted);font-size:11.5px;}
+  .flow-cap{fill:var(--arw-alert);font-weight:700;font-size:10.5px;letter-spacing:.08em;}
+
+  /* group panels */
+  .panel{fill:var(--panel-tint);stroke:var(--hair);}
+  /* nodes */
+  .n{stroke-width:1.6;}
+  .n-farmer{fill:var(--f-farmer);stroke:var(--s-farmer);}
+  .n-lang{fill:var(--f-lang);stroke:var(--s-lang);}
+  .n-gate{fill:var(--f-gate);stroke:var(--s-gate);}
+  .n-orch{fill:var(--f-orch);stroke:var(--s-orch);stroke-width:2.2;}
+  .n-svc{fill:var(--f-svc);stroke:var(--s-svc);}
+  .n-sup{fill:var(--f-sup);stroke:var(--s-sup);stroke-dasharray:0;}
+  .n-model{fill:var(--f-model);stroke:var(--s-model);}
+  .n-data{fill:var(--f-data);stroke:var(--s-data);}
+  .n-govt{fill:var(--f-govt);stroke:var(--s-govt);}
+  .n-rsk{fill:var(--f-rsk);stroke:var(--s-rsk);}
+  .pill{stroke-width:1.3;}
+  .p-lang{fill:var(--panel);stroke:var(--s-lang);}
+  .p-model{fill:var(--panel);stroke:var(--s-model);}
+  .p-govt{fill:var(--panel);stroke:var(--s-govt);}
+
+  /* arrows */
+  .arw{fill:none;stroke-width:2;}
+  .a-primary{stroke:var(--arw-primary);}
+  .a-data{stroke:var(--arw-data);}
+  .a-alert{stroke:var(--arw-alert);stroke-width:2.2;stroke-dasharray:7 5;}
+  .a-human{stroke:var(--arw-human);stroke-width:2;}
+  .mk-primary{fill:var(--arw-primary);}
+  .mk-data{fill:var(--arw-data);}
+  .mk-alert{fill:var(--arw-alert);}
+  .mk-human{fill:var(--arw-human);}
+
+  .foot{margin-top:16px;color:var(--muted);font-size:12.5px;line-height:1.5;}
+  .foot b{color:var(--ink);}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Kisan Alert · Smart Water, Crop &amp; Advisory System</div>
+    <h1>Service Architecture &amp; Flow</h1>
+    <p>A farmer sends a WhatsApp voice note, photo, or SMS in their own language. The platform recommends the right crop, tells them when to irrigate, diagnoses crop disease from a photo, and hands hard cases to the nearest Rythu Seva Kendra. Follow the arrows top‑to‑bottom for a request; coloured arrows show data reads, proactive alerts, and the human expert loop.</p>
+  </header>
+
+  <div class="diagram">
+  <svg viewBox="0 0 1320 1320" role="img" aria-label="Kisan Alert service architecture diagram">
+    <defs>
+      <marker id="ah-primary" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-primary" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="ah-data" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-data" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="ah-alert" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-alert" d="M0,0 L10,5 L0,10 z"/></marker>
+      <marker id="ah-human" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-human" d="M0,0 L10,5 L0,10 z"/></marker>
+    </defs>
+
+    <!-- ===== group panels ===== -->
+    <rect class="panel" x="76" y="30"   width="1030" height="234" rx="12"/>
+    <rect class="panel" x="76" y="290"  width="1030" height="238" rx="12"/>
+    <rect class="panel" x="76" y="560"  width="1030" height="316" rx="12"/>
+    <rect class="panel" x="76" y="896"  width="1030" height="128" rx="12"/>
+    <rect class="panel" x="76" y="1044" width="1030" height="98"  rx="12"/>
+    <rect class="panel" x="76" y="1162" width="1030" height="130" rx="12"/>
+    <text class="band-label" x="92" y="52">FARMER CHANNELS</text>
+    <text class="band-label" x="92" y="312">MESSAGING GATEWAY &amp; INDIC LANGUAGE AI</text>
+    <text class="band-label" x="92" y="582">AI ORCHESTRATION &amp; CORE SERVICES</text>
+    <text class="band-label" x="92" y="918">AI MODELS &amp; COMPUTE</text>
+    <text class="band-label" x="92" y="1066">DATA STORES</text>
+    <text class="band-label" x="92" y="1184">GOVERNMENT / EXTERNAL DATA · INDIA DPI</text>
+
+    <!-- ===== ARROWS (drawn first, under nodes' text but over panels) ===== -->
+    <!-- farmer -> channel -->
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M425,128 L425,166"/>
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M735,128 L735,166"/>
+    <!-- channel -> gateway -->
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M425,254 L470,298"/>
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M735,254 L690,298"/>
+    <!-- gateway <-> language -->
+    <path class="arw a-primary" marker-end="url(#ah-primary)" marker-start="url(#ah-primary)" d="M842,338 L876,338"/>
+    <!-- gateway -> orchestrator -->
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M580,376 L580,428"/>
+    <!-- orchestrator -> services (fan) -->
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M560,518 L300,574"/>
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M580,518 L600,574"/>
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M600,518 L900,574"/>
+    <!-- advisory -> notification ; diagnosis -> case -->
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M600,758 L600,790"/>
+    <path class="arw a-primary" marker-end="url(#ah-primary)" d="M945,758 L945,790"/>
+    <!-- services -> models (blue data/model) -->
+    <path class="arw a-data" marker-end="url(#ah-data)" d="M255,758 L255,894"/>
+    <path class="arw a-data" marker-end="url(#ah-data)" d="M505,758 L430,830 L430,894"/>
+    <path class="arw a-data" marker-end="url(#ah-data)" d="M858,758 L770,830 L770,894"/>
+    <!-- models <-> data -->
+    <path class="arw a-data" marker-end="url(#ah-data)" marker-start="url(#ah-data)" d="M255,1026 L255,1042"/>
+    <path class="arw a-data" marker-end="url(#ah-data)" marker-start="url(#ah-data)" d="M600,1026 L600,1042"/>
+    <path class="arw a-data" marker-end="url(#ah-data)" marker-start="url(#ah-data)" d="M930,1026 L930,1042"/>
+    <!-- govt -> data (ingest, up) -->
+    <path class="arw a-data" marker-end="url(#ah-data)" d="M255,1160 L255,1144"/>
+    <path class="arw a-data" marker-end="url(#ah-data)" d="M600,1160 L600,1144"/>
+    <path class="arw a-data" marker-end="url(#ah-data)" d="M930,1160 L930,1144"/>
+    <!-- diagnosis/case <-> RSK (human loop) -->
+    <path class="arw a-human" marker-end="url(#ah-human)" marker-start="url(#ah-human)" d="M1092,838 L1136,724"/>
+    <!-- proactive alert return (terracotta) -->
+    <path class="arw a-alert" marker-end="url(#ah-alert)" d="M455,826 L86,826 L86,208 L296,208"/>
+    <text class="flow-cap" x="70" y="520" transform="rotate(-90 70 520)">PROACTIVE ALERTS · WhatsApp + SMS</text>
+
+    <!-- ===== NODES ===== -->
+    <!-- Farmer -->
+    <rect class="n n-farmer" x="300" y="66" width="250" height="62" rx="10"/>
+    <text class="b-title" x="425" y="90" text-anchor="middle">WhatsApp</text>
+    <text class="b-sub" x="425" y="110" text-anchor="middle">text · voice note · crop photo · location</text>
+    <rect class="n n-farmer" x="610" y="66" width="250" height="62" rx="10"/>
+    <text class="b-title" x="735" y="90" text-anchor="middle">IVR call + SMS</text>
+    <text class="b-sub" x="735" y="110" text-anchor="middle">feature phone · no internet · voice menu</text>
+
+    <!-- Channel -->
+    <rect class="n n-gate" x="300" y="168" width="250" height="60" rx="10"/>
+    <text class="b-title sm" x="425" y="192" text-anchor="middle">WhatsApp Business Cloud API</text>
+    <text class="b-sub" x="425" y="211" text-anchor="middle">Meta gateway · media in/out · buttons</text>
+    <rect class="n n-gate" x="610" y="168" width="250" height="60" rx="10"/>
+    <text class="b-title sm" x="735" y="192" text-anchor="middle">Telephony · Exotel / Gupshup</text>
+    <text class="b-sub" x="735" y="211" text-anchor="middle">IVR flow · outbound SMS alerts</text>
+
+    <!-- Gateway -->
+    <rect class="n n-gate" x="320" y="300" width="520" height="76" rx="10"/>
+    <text class="b-title" x="580" y="330" text-anchor="middle">API Gateway / Webhook Router</text>
+    <text class="b-sub" x="580" y="352" text-anchor="middle">verify signature · normalise message · enqueue (Pub/Sub)</text>
+
+    <!-- Language AI -->
+    <rect class="n n-lang" x="876" y="300" width="220" height="200" rx="10"/>
+    <text class="b-title sm" x="986" y="324" text-anchor="middle">Indic Language AI</text>
+    <rect class="pill p-lang" x="890" y="336" width="192" height="34" rx="7"/>
+    <text class="pill-t" x="986" y="352" text-anchor="middle">ASR</text><text class="pill-s" x="986" y="365" text-anchor="middle">speech → text</text>
+    <rect class="pill p-lang" x="890" y="378" width="192" height="34" rx="7"/>
+    <text class="pill-t" x="986" y="394" text-anchor="middle">Translation</text><text class="pill-s" x="986" y="407" text-anchor="middle">Indic ⇄ English</text>
+    <rect class="pill p-lang" x="890" y="420" width="192" height="34" rx="7"/>
+    <text class="pill-t" x="986" y="436" text-anchor="middle">TTS</text><text class="pill-s" x="986" y="449" text-anchor="middle">text → speech</text>
+    <text class="b-sub xs" x="986" y="482" text-anchor="middle">Bhashini · AI4Bharat · Sarvam</text>
+
+    <!-- Orchestrator -->
+    <rect class="n n-orch" x="320" y="430" width="520" height="88" rx="10"/>
+    <text class="b-title" x="580" y="462" text-anchor="middle">Conversation Orchestrator — Claude agent</text>
+    <text class="b-sub" x="580" y="484" text-anchor="middle">intent routing · slot-filling · tool-calls · reply generation</text>
+    <text class="b-sub xs" x="580" y="502" text-anchor="middle">Claude Sonnet 5 default · Opus 4.8 for hard reasoning</text>
+
+    <!-- Core services -->
+    <rect class="n n-svc" x="110" y="576" width="290" height="182" rx="10"/>
+    <text class="b-title" x="255" y="606" text-anchor="middle">1 · Crop Recommendation</text>
+    <text class="b-sub" x="255" y="628" text-anchor="middle">ranks best crops for this</text>
+    <text class="b-sub" x="255" y="644" text-anchor="middle">plot &amp; season, with reasons</text>
+    <text class="b-sub xs" x="255" y="686" text-anchor="middle">GBM ranker + agronomic rules</text>
+    <text class="b-sub xs" x="255" y="702" text-anchor="middle">Soil Health Card · groundwater</text>
+    <text class="b-sub xs" x="255" y="718" text-anchor="middle">Sentinel-2 NDVI · price trend</text>
+
+    <rect class="n n-svc" x="455" y="576" width="290" height="182" rx="10"/>
+    <text class="b-title" x="600" y="606" text-anchor="middle">2 · Advisory &amp; Dry-Spell</text>
+    <text class="b-sub" x="600" y="628" text-anchor="middle">when to irrigate / fertilise</text>
+    <text class="b-sub" x="600" y="644" text-anchor="middle">+ proactive dry-spell alerts</text>
+    <text class="b-sub xs" x="600" y="686" text-anchor="middle">FAO-56 Penman-Monteith</text>
+    <text class="b-sub xs" x="600" y="702" text-anchor="middle">IMD forecast · SMAP moisture</text>
+    <text class="b-sub xs" x="600" y="718" text-anchor="middle">sim + satellite (IoT-ready)</text>
+
+    <rect class="n n-svc" x="800" y="576" width="290" height="182" rx="10"/>
+    <text class="b-title" x="945" y="606" text-anchor="middle">3 · Crop Health Diagnosis</text>
+    <text class="b-sub" x="945" y="628" text-anchor="middle">disease ID from photo +</text>
+    <text class="b-sub" x="945" y="644" text-anchor="middle">voice-described symptoms</text>
+    <text class="b-sub xs" x="945" y="686" text-anchor="middle">Fine-tuned CNN classifier</text>
+    <text class="b-sub xs" x="945" y="702" text-anchor="middle">+ Claude vision (RAG on ICAR)</text>
+    <text class="b-sub xs" x="945" y="718" text-anchor="middle">severity → route decision</text>
+
+    <!-- Support services -->
+    <rect class="n n-sup" x="455" y="790" width="290" height="70" rx="10"/>
+    <text class="b-title sm" x="600" y="820" text-anchor="middle">Notification / Alert svc</text>
+    <text class="b-sub" x="600" y="840" text-anchor="middle">proactive push · WhatsApp + SMS</text>
+
+    <rect class="n n-sup" x="800" y="790" width="290" height="70" rx="10"/>
+    <text class="b-title sm" x="945" y="820" text-anchor="middle">RSK Case / Referral svc</text>
+    <text class="b-sub" x="945" y="840" text-anchor="middle">routes hard cases to nearest Kendra</text>
+
+    <!-- RSK sidebar -->
+    <rect class="n n-rsk" x="1136" y="632" width="176" height="150" rx="10"/>
+    <text class="b-title sm" x="1224" y="672" text-anchor="middle">Rythu Seva</text>
+    <text class="b-title sm" x="1224" y="690" text-anchor="middle">Kendra</text>
+    <text class="b-sub" x="1224" y="714" text-anchor="middle">Agent PWA</text>
+    <text class="b-sub xs" x="1224" y="740" text-anchor="middle">expert reviews,</text>
+    <text class="b-sub xs" x="1224" y="756" text-anchor="middle">adds notes &amp; closes;</text>
+    <text class="b-sub xs" x="1224" y="772" text-anchor="middle">result → farmer</text>
+
+    <!-- AI Models -->
+    <rect class="pill p-model" x="110" y="946" width="222" height="60" rx="9"/>
+    <text class="pill-t" x="221" y="972" text-anchor="middle">GBM crop ranker</text><text class="pill-s" x="221" y="990" text-anchor="middle">XGBoost / LightGBM</text>
+    <rect class="pill p-model" x="345" y="946" width="222" height="60" rx="9"/>
+    <text class="pill-t" x="456" y="972" text-anchor="middle">CNN disease classifier</text><text class="pill-s" x="456" y="990" text-anchor="middle">EfficientNet / ViT · TFLite</text>
+    <rect class="pill p-model" x="580" y="946" width="205" height="60" rx="9"/>
+    <text class="pill-t" x="682" y="972" text-anchor="middle">Claude</text><text class="pill-s" x="682" y="990" text-anchor="middle">Vertex AI Model Garden</text>
+    <rect class="pill p-model" x="798" y="946" width="280" height="60" rx="9"/>
+    <text class="pill-t" x="938" y="972" text-anchor="middle">Google Earth Engine</text><text class="pill-s" x="938" y="990" text-anchor="middle">Sentinel-2 · SMAP · CHIRPS</text>
+
+    <!-- Data stores -->
+    <rect class="n n-data" x="110" y="1058" width="300" height="66" rx="10"/>
+    <text class="b-title sm" x="260" y="1086" text-anchor="middle">Cloud SQL + PostGIS</text>
+    <text class="b-sub" x="260" y="1105" text-anchor="middle">farmers · plots · geo</text>
+    <rect class="n n-data" x="445" y="1058" width="300" height="66" rx="10"/>
+    <text class="b-title sm" x="595" y="1086" text-anchor="middle">Cloud Storage</text>
+    <text class="b-sub" x="595" y="1105" text-anchor="middle">photos · voice clips</text>
+    <rect class="n n-data" x="780" y="1058" width="300" height="66" rx="10"/>
+    <text class="b-title sm" x="930" y="1086" text-anchor="middle">BigQuery</text>
+    <text class="b-sub" x="930" y="1105" text-anchor="middle">analytics · feedback · retraining</text>
+
+    <!-- Govt data -->
+    <rect class="pill p-govt" x="110" y="1210" width="230" height="60" rx="9"/>
+    <text class="pill-t" x="225" y="1236" text-anchor="middle">IMD / Open-Meteo</text><text class="pill-s" x="225" y="1254" text-anchor="middle">rainfall &amp; ET forecast</text>
+    <rect class="pill p-govt" x="353" y="1210" width="215" height="60" rx="9"/>
+    <text class="pill-t" x="460" y="1236" text-anchor="middle">Soil Health Card</text><text class="pill-s" x="460" y="1254" text-anchor="middle">N-P-K · pH · carbon</text>
+    <rect class="pill p-govt" x="581" y="1210" width="205" height="60" rx="9"/>
+    <text class="pill-t" x="683" y="1236" text-anchor="middle">CGWB / India-WRIS</text><text class="pill-s" x="683" y="1254" text-anchor="middle">groundwater depth</text>
+    <rect class="pill p-govt" x="799" y="1210" width="279" height="60" rx="9"/>
+    <text class="pill-t" x="938" y="1236" text-anchor="middle">Agmarknet / e-NAM</text><text class="pill-s" x="938" y="1254" text-anchor="middle">mandi price trends</text>
+
+    <!-- ===== legend (top-right) ===== -->
+    <rect class="panel" x="1134" y="40" width="178" height="186" rx="12"/>
+    <text class="legend-t" x="1150" y="64">Flow legend</text>
+    <line x1="1150" y1="86"  x2="1182" y2="86"  class="arw a-primary" marker-end="url(#ah-primary)"/>
+    <text class="legend-l" x="1192" y="90">Request path</text>
+    <line x1="1150" y1="116" x2="1182" y2="116" class="arw a-data" marker-end="url(#ah-data)"/>
+    <text class="legend-l" x="1192" y="120">Data / model read</text>
+    <line x1="1150" y1="146" x2="1182" y2="146" class="arw a-alert" marker-end="url(#ah-alert)"/>
+    <text class="legend-l" x="1192" y="150">Proactive alert</text>
+    <line x1="1150" y1="176" x2="1182" y2="176" class="arw a-human" marker-end="url(#ah-human)"/>
+    <text class="legend-l" x="1192" y="180">Expert loop (RSK)</text>
+    <text class="legend-l" x="1150" y="208" style="font-size:10.5px">Cloud: GCP primary ·</text>
+    <text class="legend-l" x="1150" y="221" style="font-size:10.5px">AWS portable alternative</text>
+  </svg>
+  </div>
+
+  <p class="foot"><b>How to read it:</b> One farmer message enters through <b>WhatsApp</b> (or the IVR/SMS fallback), is transcribed and translated by the <b>Indic Language AI</b>, and the <b>Claude orchestrator</b> routes it to one of three services. Services read soil, groundwater, weather, satellite and price data — ingested up from <b>government sources</b> into our stores and served through <b>Vertex AI models + Earth Engine</b>. Alerts push back to the farmer (terracotta); severe crop-disease cases loop to a human expert at the <b>Rythu Seva Kendra</b> (green) and the resolution returns to the farmer. The sensor feed is simulated + satellite today, with the same ingest seam left open for real LoRaWAN IoT.</p>
+</div>
