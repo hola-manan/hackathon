@@ -195,3 +195,45 @@ available. This keeps the "runs in a district in weeks" promise intact.
 3. **Data:** Soil Health Card (primary soil) + SoilGrids (gap-fill) + Sentinel-2/SMAP/CHIRPS via Earth Engine + CGWB groundwater + Agmarknet prices; cache per plot/village.
 4. **Bootstrap** on the Kaggle set to demo end-to-end this week, then **retrain on real Indian data + farmer feedback**.
 5. **Integrate** behind the existing `POST /v1/recommendations` — add a `features/` layer and a trained model, keep the rule engine as the offline fallback. No API break.
+
+---
+
+## 8. References & links
+
+### Training datasets
+- Kaggle Crop Recommendation — https://www.kaggle.com/datasets/atharvaingle/crop-recommendation-dataset
+- FAO EcoCrop — https://ecocrop.apps.fao.org/ecocrop/srv/en/home · https://www.fao.org/land-water/land/land-governance/land-resources-planning-toolbox/category/details/en/c/1027491/
+- District APY (data.gov.in) — https://www.data.gov.in/catalog/district-wise-season-wise-crop-production-statistics-0 · DES portal https://data.desagri.gov.in/website/crops-apy-report-web
+- ICRISAT District Level Database (DLD/VDSA) — http://data.icrisat.org/dld/
+
+### Government / India feature sources
+- Soil Health Card — https://www.soilhealth.dac.gov.in/ · open data https://www.data.gov.in/
+- CGWB groundwater / India-WRIS — https://indiawris.gov.in/
+- Agmarknet — https://agmarknet.gov.in/ · e-NAM — https://www.enam.gov.in/
+- ICAR — https://icar.org.in/
+- IMD — https://mausam.imd.gov.in/ · Open-Meteo — https://open-meteo.com/
+
+### Soil & satellite layers
+- SoilGrids (ISRIC) — https://www.isric.org/explore/soilgrids · REST (beta/paused) https://rest.isric.org/soilgrids/v2.0/docs · GEE assets `projects/soilgrids-isric/*`
+- Sentinel-2 SR (GEE) — https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_SR_HARMONIZED
+- SMAP soil moisture (GEE) — https://developers.google.com/earth-engine/datasets/catalog/NASA_SMAP_SPL3SMP_E_006
+- CHIRPS daily rainfall (GEE) — https://developers.google.com/earth-engine/datasets/catalog/UCSB-CHG_CHIRPS_DAILY
+- Earth Engine catalog — https://developers.google.com/earth-engine/datasets
+
+### Models / algorithms
+- XGBoost — https://xgboost.readthedocs.io/
+- LightGBM — https://lightgbm.readthedocs.io/
+- RandomForest (scikit-learn) — https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
+- MAPIE (conformal uncertainty) — https://mapie.readthedocs.io/
+
+### Research
+- Hybrid DL + rule-based crop recommendation w/ satellite (Nature Sci Rep, 2025) — https://www.nature.com/articles/s41598-025-21506-4
+- Incorporating soil information with ML for crop recommendation (Nature Sci Rep, 2025) — https://www.nature.com/articles/s41598-025-88676-z
+- ML recommendation of crops under NPK/pH/climate in India (Heliyon, 2024) — https://www.sciencedirect.com/science/article/pii/S2405844024011435 · https://pmc.ncbi.nlm.nih.gov/articles/PMC10844259/
+- AgroSense — soil-image DL for crop recommendation (arXiv, 2025) — https://arxiv.org/abs/2509.01344
+- Crop recommendation with uncertainty quantification (ScienceDirect, 2025) — https://www.sciencedirect.com/science/article/pii/S2590123025015750
+
+> Caveats: SoilGrids REST API is currently paused (use the GEE copy); per-farmer
+> Soil Health Card data has no clean public REST API (use bulk/aggregate SHC +
+> farmer confirmation over WhatsApp); the Kaggle dataset is a semi-synthetic
+> bootstrap, not field-accurate.
