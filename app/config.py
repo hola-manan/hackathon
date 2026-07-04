@@ -36,6 +36,18 @@ class Settings:
         "https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipeline",
     )
 
+    # ----- Sarvam AI (alternative Indic language stack) -----
+    SARVAM_API_KEY: str = _get("SARVAM_API_KEY", "")
+    SARVAM_BASE_URL: str = _get("SARVAM_BASE_URL", "https://api.sarvam.ai")
+    SARVAM_STT_MODEL: str = _get("SARVAM_STT_MODEL", "saarika:v2.5")
+    SARVAM_TRANSLATE_MODEL: str = _get("SARVAM_TRANSLATE_MODEL", "mayura:v1")
+    SARVAM_TTS_MODEL: str = _get("SARVAM_TTS_MODEL", "bulbul:v2")
+    SARVAM_TTS_SPEAKER: str = _get("SARVAM_TTS_SPEAKER", "anushka")
+
+    # Which Indic language provider to use: "sarvam" | "bhashini" | "auto".
+    # "auto" prefers Sarvam if its key is set, else Bhashini, else demo stub.
+    LANGUAGE_PROVIDER: str = _get("LANGUAGE_PROVIDER", "auto")
+
     # ----- Claude (advisory narration + vision diagnosis) -----
     ANTHROPIC_API_KEY: str = _get("ANTHROPIC_API_KEY", "")
     CLAUDE_MODEL: str = _get("CLAUDE_MODEL", "claude-sonnet-5")
@@ -49,6 +61,25 @@ class Settings:
         # The ULCA flow needs only User ID + ULCA API key; the per-request
         # inference key is returned by the getModelsPipeline config call.
         return bool(self.BHASHINI_USER_ID and self.BHASHINI_API_KEY)
+
+    @property
+    def sarvam_live(self) -> bool:
+        return bool(self.SARVAM_API_KEY)
+
+    @property
+    def resolved_language_provider(self) -> str:
+        """Which provider is actually active given the configured keys."""
+        choice = self.LANGUAGE_PROVIDER.lower()
+        if choice == "sarvam":
+            return "sarvam"
+        if choice == "bhashini":
+            return "bhashini"
+        # auto
+        if self.sarvam_live:
+            return "sarvam"
+        if self.bhashini_live:
+            return "bhashini"
+        return "stub"
 
     @property
     def whatsapp_live(self) -> bool:

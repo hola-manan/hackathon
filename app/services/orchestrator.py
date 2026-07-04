@@ -8,11 +8,39 @@ all real.
 """
 from __future__ import annotations
 
+import logging
+
 from app.models.schemas import (
     AdvisoryRequest, DayForecast, RecommendationRequest, Season, SoilProfile,
 )
 from app.services import advisory, crop_recommendation, diagnosis
-from app.services.language_bhashini import get_language_service
+from app.services.language import get_language_service
+
+log = logging.getLogger("kisan.orchestrator")
+
+
+async def _safe_transcribe(lang, audio_b64, source_lang) -> str:
+    try:
+        return await lang.transcribe(audio_b64, source_lang)
+    except Exception as e:  # noqa: BLE001
+        log.warning("ASR failed (%s); continuing without transcript", e)
+        return ""
+
+
+async def _safe_translate(lang, text, src, tgt) -> str:
+    try:
+        return await lang.translate(text, src, tgt)
+    except Exception as e:  # noqa: BLE001
+        log.warning("translation failed (%s); returning source text", e)
+        return text  # degrade to untranslated text rather than dropping the reply
+
+
+async def _safe_synthesize(lang, text, tgt):
+    try:
+        return await lang.synthesize(text, tgt)
+    except Exception as e:  # noqa: BLE001
+        log.warning("TTS failed (%s); replying text-only", e)
+        return None
 
 # Demo plot baseline (in production this is loaded from PostGIS by plot_id,
 # hydrated from Soil Health Card + CGWB + satellite).
@@ -57,14 +85,14 @@ async def handle_message(
 
     # 1. Voice -> text (Bhashini ASR)
     if audio_b64 and not text:
-        text = await lang.transcribe(audio_b64, source_lang)
+        text = await _safe_transcribe(lang, audio_b64, source_lang)
 
     # 2. Image present -> diagnosis regardless of text
     if image_bytes:
         intent = "diagnosis"
     else:
         # Work in English internally, then reply in the farmer's language.
-        english = await lang.translate(text or "", source_lang, "en")
+        english = await _safe_translate(lang, text or "", source_lang, "en")
         intent = detect_intent(english if source_lang != "en" else (text or ""))
 
     if intent == "diagnosis":
@@ -86,9 +114,9 @@ async def handle_message(
         english_reply = result.advisory_text
         payload = result.model_dump()
 
-    # 3. English -> farmer language (Bhashini NMT) then TTS
-    reply_text = await lang.translate(english_reply, "en", source_lang)
-    reply_audio = await lang.synthesize(reply_text, source_lang)
+    # 3. English -> farmer language (NMT) then TTS, both degrade gracefully.
+    reply_text = await _safe_translate(lang, english_reply, "en", source_lang)
+    reply_audio = await _safe_synthesize(lang, reply_text, source_lang)
 
     return {
         "intent": intent,

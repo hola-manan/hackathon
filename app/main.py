@@ -47,6 +47,8 @@ async def health():
     return {
         "status": "ok",
         "integrations": {
+            "language_provider": settings.resolved_language_provider,
+            "sarvam": "live" if settings.sarvam_live else "demo-stub",
             "bhashini": "live" if settings.bhashini_live else "demo-stub",
             "whatsapp": "live" if settings.whatsapp_live else "demo-stub",
             "claude": "live" if settings.claude_live else "demo-stub",

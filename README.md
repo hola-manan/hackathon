@@ -73,9 +73,17 @@ real, not mocked.
 
 To go live, copy `.env.example` → `.env` and fill in credentials:
 
-- **Bhashini**: `BHASHINI_USER_ID`, `BHASHINI_API_KEY`, `BHASHINI_INFERENCE_KEY`
-  (ULCA/Dhruva). The two-step config→compute call is implemented in
-  `app/services/language_bhashini.py`.
+- **Indic language** — two interchangeable providers behind one interface
+  (`transcribe` / `translate` / `synthesize`), selected by `LANGUAGE_PROVIDER`
+  (`sarvam` | `bhashini` | `auto`, default `auto` prefers whichever key is set):
+  - **Sarvam AI** (`SARVAM_API_KEY`) — single-key REST; get it from
+    https://dashboard.sarvam.ai. Implemented in `app/services/language_sarvam.py`.
+    Verify with `python -m scripts.test_sarvam`.
+  - **Bhashini** (`BHASHINI_USER_ID`, `BHASHINI_API_KEY`) — govt ULCA/Dhruva
+    two-step config→compute flow in `app/services/language_bhashini.py`.
+
+  If a provider call fails (bad key / outage) the orchestrator degrades
+  gracefully — the farmer still gets the reply in English rather than nothing.
 - **WhatsApp Cloud API**: `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN`. Point
   Meta's webhook at `POST /v1/webhooks/whatsapp` (verify token
   `WHATSAPP_VERIFY_TOKEN`).
@@ -96,8 +104,10 @@ app/
     crop_recommendation.py    agronomic scoring (→ swap in XGBoost/LightGBM)
     advisory.py               FAO-56 Penman/Hargreaves water balance + dry-spell
     diagnosis.py              CNN + Claude-vision stub + RSK routing
-    language_bhashini.py      Bhashini ASR / translation / TTS (live + stub)
-    orchestrator.py           intent routing across components
+    language.py               provider factory (Sarvam | Bhashini)
+    language_sarvam.py        Sarvam ASR / translation / TTS (single-key)
+    language_bhashini.py      Bhashini ASR / translation / TTS (ULCA two-step)
+    orchestrator.py           intent routing + graceful language fallback
   channels/whatsapp.py        WhatsApp Cloud API adapter (live + demo log)
 scripts/demo.py               end-to-end walkthrough
 ```
